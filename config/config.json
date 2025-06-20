@@ -3,5 +3,25 @@
         "url": "127.0.0.1",
         "port": 8090,
         "token": "2511"
+    },
+    "queue": {
+        "max_queue_amounts": 5,
+        "queue_size_limit": 10,
+        "release": {
+            "enable_automatic_release": false,
+            "item_release_sleep_millis": 100,
+            "item_timeout": {
+                "timeout_enable": false,
+                "timeout_millis": 5000
+            }
+        },
+        "main_queue_retry": {
+            "on_item_release_not_requested": 3,
+            "on_item_sleep_millis": 200
+        },
+        "retry_queue": {
+            "enable": true,
+            "retry_amount": 3
+        }
     }
 }

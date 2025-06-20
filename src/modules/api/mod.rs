@@ -1,7 +1,7 @@
 use actix_web::{App, HttpServer, web};
 use error_mapper::{TheResult, create_new_error};
 
-use crate::modules::{api::middleware::Validation, config::Config};
+use crate::modules::{self, api::middleware::Validation, config::Config};
 
 mod life_services;
 mod middleware;
@@ -12,7 +12,10 @@ pub async fn start_api() -> TheResult<()> {
     let server = HttpServer::new(|| {
         App::new()
             .service(
-                web::scope("/api").service(web::scope("/life").configure(life_services::services)),
+                web::scope("/api")
+                    .service(web::scope("/life").configure(life_services::services))
+                    .service(web::scope("/queue"))
+                    .configure(modules::queuer::services),
             )
             .wrap(Validation)
     })
