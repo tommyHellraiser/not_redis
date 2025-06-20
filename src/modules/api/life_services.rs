@@ -1,4 +1,4 @@
-use actix_web::{HttpResponse, get, web::ServiceConfig};
+use actix_web::{HttpResponse, get, put, web::ServiceConfig};
 
 pub(super) fn services(cfg: &mut ServiceConfig) {
     cfg.service(alive);
@@ -7,4 +7,9 @@ pub(super) fn services(cfg: &mut ServiceConfig) {
 #[get("alive")]
 async fn alive() -> HttpResponse {
     HttpResponse::Ok().body("I'm alive!!!")
+}
+
+#[put("/stop")]
+async fn stop() -> HttpResponse {
+    HttpResponse::Ok().finish()
 }

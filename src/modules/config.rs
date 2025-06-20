@@ -7,6 +7,7 @@ pub static CONFIG: OnceLock<Config> = OnceLock::new();
 #[derive(Deserialize)]
 pub struct Config {
     pub api: ApiConfig,
+    pub queue: QueueConfig,
 }
 
 #[derive(Deserialize)]
@@ -14,6 +15,40 @@ pub struct ApiConfig {
     pub url: String,
     pub port: u16,
     pub token: String,
+}
+
+#[derive(Deserialize)]
+pub struct QueueConfig {
+    pub max_queue_amounts: u8,
+    pub queue_size_limit: u16,
+    pub release: ReleaseConfig,
+    pub main_queue_retry: MainQueueRetryConfig,
+    pub retry_queue: RetryQueueConfig,
+}
+
+#[derive(Deserialize)]
+pub struct ReleaseConfig {
+    pub enable_automatic_release: bool,
+    pub item_release_sleep_millis: u32,
+    pub item_timeout: ItemTimeoutConfig,
+}
+
+#[derive(Deserialize)]
+pub struct ItemTimeoutConfig {
+    pub enable: bool,
+    pub millis: u32,
+}
+
+#[derive(Deserialize)]
+pub struct MainQueueRetryConfig {
+    pub on_item_release_not_requested: u8,
+    pub on_item_sleep_millis: u16,
+}
+
+#[derive(Deserialize)]
+pub struct RetryQueueConfig {
+    pub enable: bool,
+    pub retry_amount: u8,
 }
 
 impl Config {

@@ -11,8 +11,8 @@
             "enable_automatic_release": false,
             "item_release_sleep_millis": 100,
             "item_timeout": {
-                "timeout_enable": false,
-                "timeout_millis": 5000
+                "enable": false,
+                "millis": 5000
             }
         },
         "main_queue_retry": {
