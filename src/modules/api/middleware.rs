@@ -4,8 +4,11 @@ use actix_web::{
     Error, HttpResponse,
     body::EitherBody,
     dev::{Service, ServiceRequest, ServiceResponse, Transform, forward_ready},
+    http::StatusCode,
 };
 use futures_util::future::LocalBoxFuture;
+
+use crate::modules::config::Config;
 
 // There are two steps in middleware processing.
 // 1. Middleware initialization, middleware factory gets called with
@@ -50,23 +53,32 @@ where
     forward_ready!(service);
 
     fn call(&self, req: ServiceRequest) -> Self::Future {
-        
-        let Some(token) = get_token(&req) else {
-            let response = req.into_response(
-                HttpResponse::Unauthorized()
-                    .body("No secret token found")
-                    .map_into_right_body(),
-            );
-            return Box::pin(async { Ok(response) });
+        let Ok(app_config) = Config::get() else {
+            let msg = "Failed to get app config";
+            println!("{}", msg);
+            return Box::pin(async {
+                Ok(early_response(req, StatusCode::INTERNAL_SERVER_ERROR, msg))
+            });
         };
 
-        if !secret_is_valid(&token) {
-            let response = req.into_response(
-                HttpResponse::Unauthorized()
-                    .body("Invalid secret token")
-                    .map_into_right_body(),
-            );
-            return Box::pin(async { Ok(response) });
+        let Some(request_token) = get_token(&req) else {
+            return Box::pin(async {
+                Ok(early_response(
+                    req,
+                    StatusCode::UNAUTHORIZED,
+                    "No secret token found",
+                ))
+            });
+        };
+
+        if !token_is_valid(&request_token, &app_config.api.token) {
+            return Box::pin(async {
+                Ok(early_response(
+                    req,
+                    StatusCode::UNAUTHORIZED,
+                    "Invalid secret token",
+                ))
+            });
         }
 
         let fut = self.service.call(req);
@@ -85,10 +97,18 @@ fn get_token(req: &ServiceRequest) -> Option<String> {
         .map(|content| content.to_string())
 }
 
-fn secret_is_valid(token: &str) -> bool {
-    if token == "1234" {
-        return true;
-    }
+fn token_is_valid(request_token: &str, token: &str) -> bool {
+    request_token == token
+}
 
-    false
+fn early_response<B: 'static>(
+    req: ServiceRequest,
+    status_code: StatusCode,
+    body: &str,
+) -> ServiceResponse<EitherBody<B>> {
+    req.into_response(
+        HttpResponse::build(status_code)
+            .json(body)
+            .map_into_right_body(),
+    )
 }

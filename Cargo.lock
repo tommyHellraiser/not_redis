@@ -895,6 +895,8 @@ dependencies = [
  "actix-web",
  "error_mapper",
  "futures-util",
+ "serde",
+ "serde_json",
  "tokio",
 ]
 
