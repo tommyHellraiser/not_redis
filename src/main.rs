@@ -1,5 +1,5 @@
 use error_mapper::TheResult;
-use the_logger::{log_info, TheLogger};
+use the_logger::{TheLogger, log_info};
 
 use crate::modules::config::Config;
 

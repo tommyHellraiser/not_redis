@@ -1,6 +1,6 @@
 use actix_web::web::ServiceConfig;
 
-mod logic;
+pub(super) mod logic;
 mod services;
 
 pub(super) fn services(cfg: &mut ServiceConfig) {
@@ -11,5 +11,6 @@ pub(super) fn services(cfg: &mut ServiceConfig) {
         .service(services::add_to_queue)
         .service(services::remove_from_queue)
         .service(services::kill_queue)
-        .service(services::delete_from_queue);
+        .service(services::delete_from_queue)
+        .service(services::new_entries_enable);
 }

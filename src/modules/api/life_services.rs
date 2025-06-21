@@ -1,11 +1,13 @@
-use actix_web::{get, put, web::{self, ServiceConfig}, HttpResponse};
-use the_logger::{log_error, log_info, TheLogger};
+use actix_web::{
+    HttpResponse, get, put,
+    web::{self, ServiceConfig},
+};
+use the_logger::{TheLogger, log_error, log_info};
 
 use crate::modules::api::ApiData;
 
 pub(super) fn services(cfg: &mut ServiceConfig) {
-    cfg.service(alive)
-        .service(stop);
+    cfg.service(alive).service(stop);
 }
 
 #[get("alive")]
@@ -15,13 +17,12 @@ async fn alive() -> HttpResponse {
 
 #[put("/stop")]
 async fn stop(api_data: web::Data<ApiData>) -> HttpResponse {
-
     let logger = TheLogger::instance();
     log_info!(logger, "Stopping service...");
 
     if let Err(error) = api_data.stop_sender.send(()).await {
         log_error!(logger, "Error sending stop signal: {}", error);
-        return HttpResponse::InternalServerError().finish()
+        return HttpResponse::InternalServerError().finish();
     };
 
     log_info!(logger, "Stop signal processed!");
