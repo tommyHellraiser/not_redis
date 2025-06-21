@@ -1,7 +1,7 @@
 use error_mapper::TheResult;
 use the_logger::{TheLogger, log_info};
 
-use crate::modules::config::Config;
+use crate::modules::{config::Config, queuer::logic::SharedQueues};
 
 mod modules;
 mod utils;
@@ -19,8 +19,16 @@ async fn init_app() -> TheResult<()> {
 
     Config::load()?;
 
+    let (sender, receiver) = tokio::sync::broadcast::channel::<()>(5);
+    SharedQueues::init();
+
+    //  Initialize the workers manager, that will handle every worker and their shutdowns
+    tokio::task::spawn(modules::queuer::logic::workers::workers_manager_handler(
+        receiver.resubscribe(),
+    ));
+
     log_info!(logger, "Initializing Api");
-    modules::api::start_api().await?;
+    modules::api::start_api(sender, receiver).await?;
 
     Ok(())
 }

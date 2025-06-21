@@ -6,6 +6,10 @@ use std::{
     },
 };
 
+use crate::modules::{
+    config::Config,
+    queuer::logic::workers::{JOBS_QUEUING, QUEUES_CREATION, QUEUES_DELETION},
+};
 use actix_web::web;
 use chrono::NaiveDateTime;
 use dashmap::{DashMap, Entry};
@@ -13,9 +17,8 @@ use error_mapper::{TheResult, create_new_error};
 use serde::Serialize;
 use tokio::sync::RwLock;
 use uuid::Uuid;
-use crate::modules::config::Config;
 
-mod workers;
+pub mod workers;
 
 static SHARED_QUEUES: OnceLock<Arc<SharedQueuesType>> = OnceLock::new();
 static NEW_ENTRIES_ENABLE: AtomicBool = AtomicBool::new(true);
@@ -53,6 +56,9 @@ impl SharedQueues {
         let _ = SHARED_QUEUES.get_or_init(|| Arc::new(DashMap::new()));
         //  Enable reception of new entries by default
         NEW_ENTRIES_ENABLE.store(true, Ordering::Relaxed);
+        let _ = QUEUES_CREATION.get_or_init(|| VecDeque::new());
+        let _ = QUEUES_DELETION.get_or_init(|| VecDeque::new());
+        let _ = JOBS_QUEUING.get_or_init(|| VecDeque::new());
     }
 
     pub fn create_queue(queue_name: String) -> TheResult<SharedQueuesResult<usize>> {

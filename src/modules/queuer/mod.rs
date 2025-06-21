@@ -1,6 +1,6 @@
 use actix_web::web::ServiceConfig;
 
-pub(super) mod logic;
+pub mod logic;
 mod services;
 
 pub(super) fn services(cfg: &mut ServiceConfig) {

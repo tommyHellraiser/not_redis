@@ -20,7 +20,7 @@ async fn stop(api_data: web::Data<ApiData>) -> HttpResponse {
     let logger = TheLogger::instance();
     log_info!(logger, "Stopping service...");
 
-    if let Err(error) = api_data.stop_sender.send(()).await {
+    if let Err(error) = api_data.stop_sender.send(()) {
         log_error!(logger, "Error sending stop signal: {}", error);
         return HttpResponse::InternalServerError().finish();
     };

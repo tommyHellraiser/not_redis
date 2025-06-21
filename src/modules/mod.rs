@@ -1,3 +1,3 @@
 pub mod api;
 pub mod config;
-mod queuer;
+pub mod queuer;

@@ -21,6 +21,8 @@ pub struct ApiConfig {
 pub struct QueueConfig {
     pub max_queue_amounts: u8,
     pub queue_size_limit: u16,
+    pub workers_sleep_time_millis: u32,
+    pub workers_kill_timeout_seconds: u16,
     pub release: ReleaseConfig,
     pub main_queue_retry: MainQueueRetryConfig,
     pub retry_queue: RetryQueueConfig,
