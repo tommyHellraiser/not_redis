@@ -13,8 +13,9 @@ use error_mapper::{TheResult, create_new_error};
 use serde::Serialize;
 use tokio::sync::RwLock;
 use uuid::Uuid;
-
 use crate::modules::config::Config;
+
+mod workers;
 
 static SHARED_QUEUES: OnceLock<Arc<SharedQueuesType>> = OnceLock::new();
 static NEW_ENTRIES_ENABLE: AtomicBool = AtomicBool::new(true);

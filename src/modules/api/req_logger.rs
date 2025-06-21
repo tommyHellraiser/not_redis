@@ -1,11 +1,10 @@
 use std::future::{Ready, ready};
 
 use actix_web::{
-    Error, HttpResponse,
+    Error,
     body::EitherBody,
     dev::{Service, ServiceRequest, ServiceResponse, Transform, forward_ready},
     http::StatusCode,
-    middleware::Logger,
 };
 use futures_util::future::LocalBoxFuture;
 use the_logger::{TheLogger, log_info};
