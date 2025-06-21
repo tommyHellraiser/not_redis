@@ -51,7 +51,7 @@ impl SharedQueues {
     pub fn init() {
         let _ = SHARED_QUEUES.get_or_init(|| Arc::new(DashMap::new()));
         //  Enable reception of new entries by default
-        let _ = NEW_ENTRIES_ENABLE.store(true, Ordering::Relaxed);
+        NEW_ENTRIES_ENABLE.store(true, Ordering::Relaxed);
     }
 
     pub fn create_queue(queue_name: String) -> TheResult<SharedQueuesResult<usize>> {
@@ -89,7 +89,7 @@ impl SharedQueues {
             return Err(create_new_error!("Could not get queues map"));
         };
 
-        if let None = shared.remove(&queue_name) {
+        if shared.remove(&queue_name).is_none() {
             return Ok(SharedQueuesResult::Content(
                 "No queue found with the requested name".to_string(),
             ));
