@@ -1,4 +1,5 @@
 use error_mapper::TheResult;
+use the_logger::{log_info, TheLogger};
 
 use crate::modules::config::Config;
 
@@ -13,8 +14,12 @@ async fn main() {
 }
 
 async fn init_app() -> TheResult<()> {
+    let logger = TheLogger::instance();
+    log_info!(logger, "Loading JSON configuration");
+
     Config::load()?;
 
+    log_info!(logger, "Initializing Api");
     modules::api::start_api().await?;
 
     Ok(())

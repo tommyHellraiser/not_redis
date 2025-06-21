@@ -925,6 +925,7 @@ dependencies = [
  "futures-util",
  "serde",
  "serde_json",
+ "the_logger",
  "tokio",
  "uuid",
 ]
@@ -1269,6 +1270,17 @@ dependencies = [
  "proc-macro2",
  "quote",
  "syn",
+]
+
+[[package]]
+name = "the_logger"
+version = "0.5.3"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "fc684008290d2c9ea6188b720264a87ca980efee097dce8687c30eb91ab36daf"
+dependencies = [
+ "chrono",
+ "lazy_static",
+ "tokio",
 ]
 
 [[package]]
