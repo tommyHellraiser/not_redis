@@ -1,4 +1,4 @@
-use crate::modules::queuer::logic::SharedQueues;
+use crate::modules::{api::req_logger::RequestLogger, queuer::logic::SharedQueues};
 use actix_web::{App, HttpServer, dev::ServerHandle, web};
 use error_mapper::{TheResult, create_new_error};
 use the_logger::{TheLogger, log_info};
@@ -8,6 +8,7 @@ use crate::modules::{self, api::middleware::AuthMiddleware, config::Config};
 
 mod life_services;
 mod middleware;
+mod req_logger;
 
 pub(super) struct ApiData {
     pub(super) stop_sender: Sender<()>,
@@ -32,6 +33,7 @@ pub async fn start_api() -> TheResult<()> {
                     .service(web::scope("/queue").configure(modules::queuer::services)),
             )
             .wrap(AuthMiddleware)
+            .wrap(RequestLogger)
     })
     .bind(app_config.api.get_bind())
     .map_err(|error| create_new_error!(error))?
