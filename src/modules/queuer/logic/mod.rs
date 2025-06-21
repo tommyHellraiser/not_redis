@@ -1,7 +1,7 @@
 use std::{
-    collections::VecDeque,
+    collections::{HashMap, VecDeque},
     sync::{
-        Arc, Mutex, OnceLock,
+        Arc, OnceLock,
         atomic::{AtomicBool, Ordering},
     },
 };
@@ -58,7 +58,7 @@ impl SharedQueues {
         let app_config = Config::get()?;
 
         let Some(shared) = SHARED_QUEUES.get() else {
-            return Err(create_new_error!("Could not get initialize"));
+            return Err(create_new_error!("Could not get queues map"));
         };
 
         //  Validate there's room to create a new queue first. Compare the current amount with the max amount
@@ -82,6 +82,20 @@ impl SharedQueues {
         //  Return the amount of queue places available
         let available = app_config.queue.max_queue_amounts as usize - shared.len();
         Ok(SharedQueuesResult::Content(available))
+    }
+
+    pub fn delete_queue(queue_name: String) -> TheResult<SharedQueuesResult<String>> {
+        let Some(shared) = SHARED_QUEUES.get() else {
+            return Err(create_new_error!("Could not get queues map"));
+        };
+
+        if let None = shared.remove(&queue_name) {
+            return Ok(SharedQueuesResult::Content(
+                "No queue found with the requested name".to_string(),
+            ));
+        }
+
+        Ok(SharedQueuesResult::Ok)
     }
 
     pub async fn send_to_queue_back(
@@ -129,7 +143,27 @@ impl SharedQueues {
         Ok(SharedQueuesResult::Content(uuids))
     }
 
-    pub fn list_queues() {}
+    /// Returns a list of the curently available queues, with the UUIDs of each element present for each queue
+    pub async fn list_queues() -> TheResult<SharedQueuesResult<HashMap<String, Vec<String>>>> {
+        let Some(shared_queues) = SHARED_QUEUES.get() else {
+            return Err(create_new_error!("Could not get queues map"));
+        };
+
+        let mut queues = HashMap::with_capacity(shared_queues.len());
+
+        for content in shared_queues.iter() {
+            let (queue_name, queue_content) = content.pair();
+            let uuids = queue_content
+                .read()
+                .await
+                .iter()
+                .map(|content| content.uuid.to_string())
+                .collect::<Vec<String>>();
+            queues.insert(queue_name.clone(), uuids);
+        }
+
+        Ok(SharedQueuesResult::Content(queues))
+    }
 
     pub fn new_entries_enable(enable: bool) {
         NEW_ENTRIES_ENABLE.store(enable, Ordering::Relaxed);

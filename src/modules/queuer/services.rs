@@ -1,21 +1,80 @@
-use actix_web::{HttpResponse, get, post, put, web};
+use actix_web::{HttpResponse, delete, get, post, put, web};
 use the_logger::{TheLogger, log_error, log_warning};
 
 use crate::modules::queuer::logic::{SharedQueues, SharedQueuesResult};
 
 #[get("/status")]
 pub(super) async fn get_status_for_all() -> HttpResponse {
-    HttpResponse::Ok().finish()
+    let logger = TheLogger::instance();
+
+    let queues = match SharedQueues::list_queues().await {
+        Ok(SharedQueuesResult::Content(queues)) => queues,
+        Err(error) => {
+            log_error!(logger, "Error getting queues status: {}", error);
+            return HttpResponse::InternalServerError().finish();
+        }
+        _ => {
+            log_warning!(logger, "Unexpected result!");
+            return HttpResponse::InternalServerError().finish();
+        }
+    };
+
+    let response = match serde_json::to_string_pretty(&queues) {
+        Ok(response) => response,
+        Err(error) => {
+            log_error!(
+                logger,
+                "Could not build response from queues status: {}",
+                error
+            );
+            return HttpResponse::InternalServerError().finish();
+        }
+    };
+
+    HttpResponse::Ok().body(response)
 }
 
 #[get("/status/{queue_name}")]
-pub(super) async fn get_status_for_queue() -> HttpResponse {
-    HttpResponse::Ok().finish()
-}
+pub(super) async fn get_status_for_queue(path: web::Path<String>) -> HttpResponse {
+    let queue_name = path.into_inner();
+    let logger = TheLogger::instance();
 
-#[get("/list")]
-pub(super) async fn list_queues() -> HttpResponse {
-    HttpResponse::Ok().finish()
+    let result = match SharedQueues::get_queue_status(queue_name).await {
+        Ok(result) => result,
+        Err(error) => {
+            log_error!(
+                logger,
+                "Could not get status for requested queue: {}",
+                error
+            );
+            return HttpResponse::InternalServerError().finish();
+        }
+    };
+
+    let content = match result {
+        SharedQueuesResult::Content(content) => content,
+        SharedQueuesResult::RequestError(request_error) => {
+            return HttpResponse::BadRequest().body(request_error);
+        }
+        _ => {
+            log_warning!(logger, "Unexpected result!");
+            return HttpResponse::InternalServerError().finish();
+        }
+    };
+
+    let response = match serde_json::to_string_pretty(&content) {
+        Ok(response) => response,
+        Err(error) => {
+            log_error!(
+                logger,
+                "Could not build response from queue status: {}",
+                error
+            );
+            return HttpResponse::InternalServerError().finish();
+        }
+    };
+
+    HttpResponse::Ok().body(response)
 }
 
 #[post("/create/{queue_name}")]
@@ -49,18 +108,42 @@ pub(super) async fn create_queue(path: web::Path<String>) -> HttpResponse {
     HttpResponse::Ok().body(format!("{} queue places remain available", available))
 }
 
-#[post("/enqueue")]
+#[post("/queue_job")]
 pub(super) async fn add_to_queue() -> HttpResponse {
     HttpResponse::Ok().finish()
 }
 
-#[post("/dequeue/{uuid}")]
+#[post("/dequeue_job/{uuid}")]
 pub(super) async fn remove_from_queue() -> HttpResponse {
     HttpResponse::Ok().finish()
 }
 
-#[post("/kill/{queue_name}")]
-pub(super) async fn kill_queue() -> HttpResponse {
+#[delete("/delete/{queue_name}")]
+pub(super) async fn delete_queue(path: web::Path<String>) -> HttpResponse {
+    let queue_name = path.into_inner();
+    let logger = TheLogger::instance();
+
+    let result = match SharedQueues::delete_queue(queue_name) {
+        Ok(result) => result,
+        Err(error) => {
+            log_error!(logger, "Could not delete queue from queues map: {}", error);
+            return HttpResponse::InternalServerError().finish();
+        }
+    };
+
+    match result {
+        SharedQueuesResult::Ok => {
+            //  All good, deleted successfully
+        }
+        SharedQueuesResult::RequestError(bad_request) => {
+            return HttpResponse::BadRequest().body(bad_request);
+        }
+        SharedQueuesResult::Content(_) => {
+            log_warning!(logger, "Unexpected result!");
+            return HttpResponse::InternalServerError().finish();
+        }
+    }
+
     HttpResponse::Ok().finish()
 }
 
