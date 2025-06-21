@@ -1,7 +1,10 @@
 use error_mapper::TheResult;
 use the_logger::{TheLogger, log_info};
 
-use crate::modules::{config::Config, queuer::logic::SharedQueues};
+use crate::modules::{
+    config::Config,
+    queuer::logic::{QueueNameType, SharedQueues, UuidType},
+};
 
 mod modules;
 mod utils;
@@ -19,16 +22,21 @@ async fn init_app() -> TheResult<()> {
 
     Config::load()?;
 
-    let (sender, receiver) = tokio::sync::broadcast::channel::<()>(5);
+    let (stop_sender, stop_receiver) = tokio::sync::broadcast::channel::<()>(5);
+    //  Channel types are (String: Queue Name, String: UUID)
+    //  Dequeue sender will go to the endpoints inside ApiData
+    //  Dequeue receiver will go to the workers manager cron, to derive the work to the corresponding worker
+    let (dequeue_sender, dequeue_receiver) =
+        tokio::sync::mpsc::channel::<(QueueNameType, UuidType)>(10);
     SharedQueues::init();
 
     //  Initialize the workers manager, that will handle every worker and their shutdowns
     tokio::task::spawn(modules::queuer::logic::workers::workers_manager_handler(
-        receiver.resubscribe(),
+        stop_receiver.resubscribe(),
     ));
 
     log_info!(logger, "Initializing Api");
-    modules::api::start_api(sender, receiver).await?;
+    modules::api::start_api(stop_sender, stop_receiver, dequeue_sender).await?;
 
     Ok(())
 }

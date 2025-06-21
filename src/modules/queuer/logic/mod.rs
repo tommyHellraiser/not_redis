@@ -20,10 +20,13 @@ use uuid::Uuid;
 
 pub mod workers;
 
+pub type QueueNameType = String;
+pub type UuidType = String;
+
 static SHARED_QUEUES: OnceLock<Arc<SharedQueuesType>> = OnceLock::new();
 static NEW_ENTRIES_ENABLE: AtomicBool = AtomicBool::new(true);
 
-type SharedQueuesType = DashMap<String, RwLock<SingleQueueType>>;
+type SharedQueuesType = DashMap<QueueNameType, RwLock<SingleQueueType>>;
 type SingleQueueType = VecDeque<Queue>;
 
 pub struct SharedQueues;
@@ -61,12 +64,10 @@ impl SharedQueues {
         let _ = JOBS_QUEUING.get_or_init(|| VecDeque::new());
     }
 
-    pub fn create_queue(queue_name: String) -> TheResult<SharedQueuesResult<usize>> {
+    pub fn create_queue(queue_name: QueueNameType) -> TheResult<SharedQueuesResult<usize>> {
         let app_config = Config::get()?;
 
-        let Some(shared) = SHARED_QUEUES.get() else {
-            return Err(create_new_error!("Could not get queues map"));
-        };
+        let shared = Self::get_shared()?;
 
         //  Validate there's room to create a new queue first. Compare the current amount with the max amount
         // If they're equal, then we're at the limit and no other queues can be created
@@ -91,10 +92,8 @@ impl SharedQueues {
         Ok(SharedQueuesResult::Content(available))
     }
 
-    pub fn delete_queue(queue_name: String) -> TheResult<SharedQueuesResult<String>> {
-        let Some(shared) = SHARED_QUEUES.get() else {
-            return Err(create_new_error!("Could not get queues map"));
-        };
+    pub fn delete_queue(queue_name: QueueNameType) -> TheResult<SharedQueuesResult<String>> {
+        let shared = Self::get_shared()?;
 
         if shared.remove(&queue_name).is_none() {
             return Ok(SharedQueuesResult::Content(
@@ -106,15 +105,14 @@ impl SharedQueues {
     }
 
     pub async fn send_to_queue_back(
-        queue_name: String,
+        queue_name: QueueNameType,
         identifier: String,
         job: Option<web::Bytes>,
     ) -> TheResult<SharedQueuesResult<String>> {
         //  Get the queue first
-        let Some(shared_queues) = SHARED_QUEUES.get() else {
-            return Err(create_new_error!("Could not get queues map"));
-        };
-        let Some(queue) = shared_queues.get(&queue_name) else {
+        let shared = Self::get_shared()?;
+
+        let Some(queue) = shared.get(&queue_name) else {
             return Ok(SharedQueuesResult::RequestError(
                 "Queue name not found".to_string(),
             ));
@@ -129,12 +127,10 @@ impl SharedQueues {
 
     /// Returns the UUIDs of every item in a single queue
     pub async fn get_queue_status(
-        queue_name: String,
+        queue_name: QueueNameType,
     ) -> TheResult<SharedQueuesResult<Vec<String>>> {
-        let Some(shared_queues) = SHARED_QUEUES.get() else {
-            return Err(create_new_error!("Could not get queues map"));
-        };
-        let Some(queue) = shared_queues.get(&queue_name) else {
+        let shared = Self::get_shared()?;
+        let Some(queue) = shared.get(&queue_name) else {
             return Ok(SharedQueuesResult::RequestError(
                 "Queue name not found".to_string(),
             ));
@@ -152,13 +148,11 @@ impl SharedQueues {
 
     /// Returns a list of the curently available queues, with the UUIDs of each element present for each queue
     pub async fn list_queues() -> TheResult<SharedQueuesResult<HashMap<String, Vec<String>>>> {
-        let Some(shared_queues) = SHARED_QUEUES.get() else {
-            return Err(create_new_error!("Could not get queues map"));
-        };
+        let shared = Self::get_shared()?;
 
-        let mut queues = HashMap::with_capacity(shared_queues.len());
+        let mut queues = HashMap::with_capacity(shared.len());
 
-        for content in shared_queues.iter() {
+        for content in shared.iter() {
             let (queue_name, queue_content) = content.pair();
             let uuids = queue_content
                 .read()
@@ -182,6 +176,13 @@ impl SharedQueues {
         }
 
         None
+    }
+
+    fn get_shared() -> TheResult<Arc<DashMap<QueueNameType, RwLock<VecDeque<Queue>>>>> {
+        SHARED_QUEUES
+            .get()
+            .ok_or(create_new_error!("Could not get shared queues"))
+            .map(|result| Arc::clone(result))
     }
 }
 

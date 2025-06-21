@@ -1,8 +1,14 @@
-use crate::modules::api::req_logger::RequestLogger;
+use crate::modules::{
+    api::req_logger::RequestLogger,
+    queuer::logic::{QueueNameType, UuidType},
+};
 use actix_web::{App, HttpServer, dev::ServerHandle, web};
 use error_mapper::{TheResult, create_new_error};
 use the_logger::{TheLogger, log_info};
-use tokio::sync::broadcast::{Receiver, Sender};
+use tokio::sync::{
+    broadcast::{Receiver, Sender},
+    mpsc::Sender as MpscSender,
+};
 
 use crate::modules::{self, api::middleware::AuthMiddleware, config::Config};
 
@@ -12,16 +18,23 @@ mod req_logger;
 
 pub(super) struct ApiData {
     pub(super) stop_sender: Sender<()>,
+    pub(super) dequeue_sender: MpscSender<(QueueNameType, UuidType)>,
 }
 
-pub async fn start_api(sender: Sender<()>, receiver: Receiver<()>) -> TheResult<()> {
+pub async fn start_api(
+    sender: Sender<()>,
+    receiver: Receiver<()>,
+    dequeue_sender: MpscSender<(QueueNameType, UuidType)>,
+) -> TheResult<()> {
     let app_config = Config::get()?;
 
     let server = HttpServer::new(move || {
-        let sender = sender.clone();
+        let stop_sender = sender.clone();
+        let dequeue_sender = dequeue_sender.clone();
         App::new()
             .app_data(web::Data::new(ApiData {
-                stop_sender: sender,
+                stop_sender,
+                dequeue_sender,
             }))
             .service(
                 web::scope("/api")

@@ -33,10 +33,14 @@ use std::{
     },
 };
 
+use error_mapper::{TheResult, create_new_error};
 use the_logger::{TheLogger, log_error, log_info};
 use tokio::sync::{broadcast::Receiver, mpsc::error::TryRecvError};
 
-use crate::modules::{config::Config, queuer::logic::Queue};
+use crate::modules::{
+    config::Config,
+    queuer::logic::{Queue, SharedQueues},
+};
 
 //  Necessary statics that will externally receive the queuing directives. For workers, there will be
 // internal channels
@@ -77,7 +81,7 @@ async fn job_worker(
     queue_name: &str,
     mut job_receiver: tokio::sync::mpsc::Receiver<Queue>,
     mut stop_receiver: tokio::sync::mpsc::Receiver<()>,
-) {
+) -> TheResult<()> {
     let sleep_time_millis = Config::get().unwrap().queue.workers_sleep_time_millis;
     let sleep_time = std::time::Duration::from_millis(sleep_time_millis as u64);
 
@@ -99,8 +103,9 @@ async fn job_worker(
                     }
                     TryRecvError::Disconnected => {
                         //  If the stop channel was disconnected, the worker can't stop later on. Abort the worker now
-                        log_error!(logger, "Channel disconnected, worker has to resign...");
-                        return;
+                        let msg = "Channel disconnected, worker has to resign...";
+                        log_error!(logger, "{}", msg);
+                        return Err(create_new_error!(msg));
                     }
                 }
             }
@@ -116,19 +121,17 @@ async fn job_worker(
                 //  If a stop was requested, do not add more jobs to the queue, only dequeue from now on
             }
             (Ok(job_to_queue), _) => {
+                let shared_queue = SharedQueues::get_shared()?;
                 //  If there was a job in the channel, then add it to the queue
-                let Some(shared_queue) = super::SHARED_QUEUES
-                    .get()
-                    .and_then(|shared_queue| shared_queue.get(queue_name))
-                else {
+                let Some(shared_queue) = shared_queue.get(queue_name) else {
                     //  If the queue cannot be found, then either the shared queues are broken or the queue was deleted.
                     // Return from this worker, it has nothing more to do
-                    log_error!(
-                        logger,
+                    let msg = format!(
                         "Could not find the queue named: {}. Exiting the worker process",
                         queue_name
                     );
-                    return;
+                    log_error!(logger, "{}", msg);
+                    return Err(create_new_error!(msg));
                 };
                 shared_queue.write().await.push_back(job_to_queue);
             }
@@ -138,15 +141,27 @@ async fn job_worker(
                         //  If the channel is empty, continue with another task
                     }
                     TryRecvError::Disconnected => {
-                        log_error!(logger, "Channel disconnected, worker has to resign...");
-                        return;
+                        let msg = "Channel disconnected, worker has to resign...";
+                        log_error!(logger, "{}", msg);
+                        return Err(create_new_error!(msg));
                     }
                 }
             }
         }
 
         //  Try to dequeue jobs from the existing queue
-        //  TODO
+        //  TODO conditional. If there's a request to pop a job from the queue, execute this....
+        {
+            let shared_queues = SharedQueues::get_shared()?;
+            let Some(locked_queue) = shared_queues.get(queue_name) else {
+                return Err(create_new_error!(format!(
+                    "Could not find queue named: {}",
+                    queue_name
+                )));
+            };
+
+            if let Some(queued_job) = locked_queue.write().await.pop_front() {}
+        }
 
         tokio::time::sleep(sleep_time).await;
     }
