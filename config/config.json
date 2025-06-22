@@ -9,6 +9,7 @@
         "queue_size_limit": 10,
         "workers_sleep_time_millis": 100,
         "workers_kill_timeout_seconds": 5,
+        "dequeue_timeout_wait_seconds": 10,
         "release": {
             "enable_automatic_release": false,
             "item_release_sleep_millis": 100,

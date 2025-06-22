@@ -1,7 +1,4 @@
-use crate::modules::{
-    api::req_logger::RequestLogger,
-    queuer::logic::{QueueNameType, UuidType},
-};
+use crate::modules::{api::req_logger::RequestLogger, queuer::logic::DequeueSyncInfo};
 use actix_web::{App, HttpServer, dev::ServerHandle, web};
 use error_mapper::{TheResult, create_new_error};
 use the_logger::{TheLogger, log_info};
@@ -18,13 +15,13 @@ mod req_logger;
 
 pub(super) struct ApiData {
     pub(super) stop_sender: Sender<()>,
-    pub(super) dequeue_sender: MpscSender<(QueueNameType, UuidType)>,
+    pub(super) dequeue_sender: MpscSender<DequeueSyncInfo>,
 }
 
 pub async fn start_api(
     sender: Sender<()>,
     receiver: Receiver<()>,
-    dequeue_sender: MpscSender<(QueueNameType, UuidType)>,
+    dequeue_sender: MpscSender<DequeueSyncInfo>,
 ) -> TheResult<()> {
     let app_config = Config::get()?;
 

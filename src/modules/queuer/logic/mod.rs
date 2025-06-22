@@ -16,6 +16,8 @@ use dashmap::{DashMap, Entry};
 use error_mapper::{TheResult, create_new_error};
 use serde::Serialize;
 use tokio::sync::RwLock;
+use tokio::sync::mpsc::Sender as MpscSender;
+use tokio::sync::oneshot::Sender as OneShotsender;
 use uuid::Uuid;
 
 pub mod workers;
@@ -31,6 +33,12 @@ type SingleQueueType = VecDeque<Queue>;
 
 pub struct SharedQueues;
 
+pub struct DequeueSyncInfo {
+    pub queue_name: QueueNameType,
+    pub uuid: Uuid,
+    pub dequeue_confirmation_sender: OneShotsender<Queue>,
+}
+
 pub enum SharedQueuesResult<S: Serialize> {
     Ok,
     Content(S),
@@ -41,7 +49,8 @@ pub enum SharedQueuesResult<S: Serialize> {
 /// to either queue and wait actively until the job is dequeued, or simply sending the job
 /// to this queue system, and handling the job execution later with a cron job, in a separate
 /// thread/process
-struct Queue {
+#[derive(Clone, Debug)]
+pub struct Queue {
     uuid: Uuid,
     /// This identifier must be sent by the user requesting to queue, to uniquely identify each job on their side
     /// When an item pop fails and cannot be freed, this identifier will be logged together with the contents of the job
@@ -52,6 +61,7 @@ struct Queue {
     job: Option<web::Bytes>,
     /// Registered in UTC format for consistency
     job_creation: NaiveDateTime,
+    retry_count: u8,
 }
 
 impl SharedQueues {
@@ -59,9 +69,9 @@ impl SharedQueues {
         let _ = SHARED_QUEUES.get_or_init(|| Arc::new(DashMap::new()));
         //  Enable reception of new entries by default
         NEW_ENTRIES_ENABLE.store(true, Ordering::Relaxed);
-        let _ = QUEUES_CREATION.get_or_init(|| VecDeque::new());
-        let _ = QUEUES_DELETION.get_or_init(|| VecDeque::new());
-        let _ = JOBS_QUEUING.get_or_init(|| VecDeque::new());
+        let _ = QUEUES_CREATION.get_or_init(VecDeque::new);
+        let _ = QUEUES_DELETION.get_or_init(VecDeque::new);
+        let _ = JOBS_QUEUING.get_or_init(VecDeque::new);
     }
 
     pub fn create_queue(queue_name: QueueNameType) -> TheResult<SharedQueuesResult<usize>> {
@@ -182,7 +192,47 @@ impl SharedQueues {
         SHARED_QUEUES
             .get()
             .ok_or(create_new_error!("Could not get shared queues"))
-            .map(|result| Arc::clone(result))
+            .map(Arc::clone)
+    }
+
+    pub async fn notify_dequeue_request_and_await(
+        queue_name: String,
+        uuid: Uuid,
+        dequeue_sender: MpscSender<DequeueSyncInfo>,
+    ) -> TheResult<Option<Queue>> {
+        //  First, create a channel that the worker will use to notify this service function when the job is dequeued
+        let (dequeue_confirmation_sender, dequeue_confirmation_receiver) =
+            tokio::sync::oneshot::channel::<Queue>();
+
+        //  Build the sync info for the worker to correctly process the dequeuing
+        let sync_info = DequeueSyncInfo {
+            queue_name,
+            uuid,
+            dequeue_confirmation_sender,
+        };
+
+        //  Send the message thorugh the channel to notify the worker manager that we're waiting for our job to be dequeued
+        dequeue_sender
+            .send(sync_info)
+            .await
+            .map_err(|error| create_new_error!(error))?;
+
+        let wait_timeout = std::time::Duration::from_secs(
+            Config::get()?.queue.dequeue_timeout_wait_seconds as u64,
+        );
+
+        //  Await both the timeout and the reception of the dequeue confirmation. Whichever comes first, will unlock the processing
+        tokio::select! {
+            _ = tokio::time::sleep(wait_timeout) => {
+                //  If we timed out, we need to return accordingly
+                Ok(None)
+            }
+            result = dequeue_confirmation_receiver => {
+                //  Otherwise, the job was dequeued correctly, we return it to the caller
+                let queued_job = result.map_err(|error| create_new_error!(error))?;
+                Ok(Some(queued_job))
+            }
+        }
     }
 }
 
@@ -193,6 +243,7 @@ impl Queue {
             identifier,
             job,
             job_creation: chrono::Utc::now().naive_utc(),
+            retry_count: 0,
         }
     }
 }
