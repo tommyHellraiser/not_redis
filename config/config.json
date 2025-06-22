@@ -19,7 +19,7 @@
             }
         },
         "main_queue_retry": {
-            "on_item_release_not_requested": 3,
+            "on_item_release_not_requested": 10,
             "on_item_sleep_millis": 200
         },
         "retry_queue": {

@@ -3,7 +3,7 @@ use the_logger::{TheLogger, log_info};
 
 use crate::modules::{
     config::Config,
-    queuer::logic::{DequeueSyncInfo, SharedQueues},
+    queuer::logic::{DequeueSyncInfo, NewJobInfo, SharedQueues},
 };
 
 mod modules;
@@ -27,16 +27,18 @@ async fn init_app() -> TheResult<()> {
     //  Dequeue sender will go to the endpoints inside ApiData
     //  Dequeue receiver will go to the workers manager cron, to derive the work to the corresponding worker
     let (dequeue_sender, dequeue_receiver) = tokio::sync::mpsc::channel::<DequeueSyncInfo>(10);
+    let (new_jobs_sender, new_jobs_receiver) = tokio::sync::mpsc::channel::<NewJobInfo>(20);
     SharedQueues::init();
 
     //  Initialize the workers manager, that will handle every worker and their shutdowns
     tokio::task::spawn(modules::queuer::logic::workers::workers_manager_handler(
         stop_receiver.resubscribe(),
+        new_jobs_receiver,
         dequeue_receiver,
     ));
 
     log_info!(logger, "Initializing Api");
-    modules::api::start_api(stop_sender, stop_receiver, dequeue_sender).await?;
+    modules::api::start_api(stop_sender, stop_receiver, dequeue_sender, new_jobs_sender).await?;
 
     Ok(())
 }

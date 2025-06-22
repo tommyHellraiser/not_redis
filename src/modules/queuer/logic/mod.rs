@@ -8,7 +8,7 @@ use std::{
 
 use crate::modules::{
     config::Config,
-    queuer::logic::workers::{JOBS_QUEUING, QUEUES_CREATION, QUEUES_DELETION},
+    queuer::logic::workers::{QUEUES_CREATION, QUEUES_DELETION},
 };
 use actix_web::web;
 use chrono::NaiveDateTime;
@@ -37,6 +37,11 @@ pub struct DequeueSyncInfo {
     pub queue_name: QueueNameType,
     pub uuid: Uuid,
     pub dequeue_confirmation_sender: OneShotsender<Queue>,
+}
+
+pub struct NewJobInfo {
+    queue_name: QueueNameType,
+    job: Queue,
 }
 
 pub enum SharedQueuesResult<S: Serialize> {
@@ -69,9 +74,8 @@ impl SharedQueues {
         let _ = SHARED_QUEUES.get_or_init(|| Arc::new(DashMap::new()));
         //  Enable reception of new entries by default
         NEW_ENTRIES_ENABLE.store(true, Ordering::Relaxed);
-        let _ = QUEUES_CREATION.get_or_init(VecDeque::new);
-        let _ = QUEUES_DELETION.get_or_init(VecDeque::new);
-        let _ = JOBS_QUEUING.get_or_init(VecDeque::new);
+        let _ = QUEUES_CREATION.get_or_init(|| RwLock::new(VecDeque::new()));
+        let _ = QUEUES_DELETION.get_or_init(|| RwLock::new(VecDeque::new()));
     }
 
     pub fn create_queue(queue_name: QueueNameType) -> TheResult<SharedQueuesResult<usize>> {
