@@ -10,7 +10,6 @@ use crate::modules::{
     config::Config,
     queuer::logic::workers::{QUEUES_CREATION, QUEUES_DELETION},
 };
-use actix_web::web;
 use chrono::NaiveDateTime;
 use dashmap::{DashMap, Entry};
 use error_mapper::{TheResult, create_new_error};
@@ -23,7 +22,6 @@ use uuid::Uuid;
 pub mod workers;
 
 pub type QueueNameType = String;
-pub type UuidType = String;
 
 static SHARED_QUEUES: OnceLock<Arc<SharedQueuesType>> = OnceLock::new();
 static NEW_ENTRIES_ENABLE: AtomicBool = AtomicBool::new(true);
@@ -63,10 +61,29 @@ pub struct Queue {
     identifier: String,
     /// Optional to allow the user to either use this service as a lock handler, or use the full
     /// capabilities of queuing
-    job: Option<web::Bytes>,
+    job: Option<serde_json::Value>,
     /// Registered in UTC format for consistency
     job_creation: NaiveDateTime,
     retry_count: u8,
+}
+
+#[derive(Debug, Serialize, Clone)]
+pub struct QueueExternal {
+    uuid: String,
+    identifier: String,
+    job: Option<serde_json::Value>,
+    job_creation: NaiveDateTime,
+}
+
+impl From<Queue> for QueueExternal {
+    fn from(value: Queue) -> Self {
+        Self {
+            uuid: value.uuid.to_string(),
+            identifier: value.identifier.clone(),
+            job: value.job.clone(),
+            job_creation: value.job_creation,
+        }
+    }
 }
 
 impl SharedQueues {
@@ -118,26 +135,23 @@ impl SharedQueues {
         Ok(SharedQueuesResult::Ok)
     }
 
-    pub async fn send_to_queue_back(
-        queue_name: QueueNameType,
-        identifier: String,
-        job: Option<web::Bytes>,
-    ) -> TheResult<SharedQueuesResult<String>> {
+    pub async fn add_to_queue(// queue_name: QueueNameType,
+        // identifier: String,
+        // job: Option<web::Bytes>,
+    ) {
         //  Get the queue first
-        let shared = Self::get_shared()?;
+        // let shared = Self::get_shared()?;
 
-        let Some(queue) = shared.get(&queue_name) else {
-            return Ok(SharedQueuesResult::RequestError(
-                "Queue name not found".to_string(),
-            ));
-        };
+        // let Some(queue) = shared.get(&queue_name) else {
+        //     return Ok(SharedQueuesResult::RequestError(
+        //         "Queue name not found".to_string(),
+        //     ));
+        // };
 
-        queue.write().await.push_back(Queue::new(identifier, job));
+        // queue.write().await.push_back(Queue::new(identifier, job));
 
-        Ok(SharedQueuesResult::Ok)
+        // Ok(SharedQueuesResult::Ok)
     }
-
-    pub fn pop_from_queue_front() {}
 
     /// Returns the UUIDs of every item in a single queue
     pub async fn get_queue_status(
@@ -199,7 +213,7 @@ impl SharedQueues {
             .map(Arc::clone)
     }
 
-    pub async fn notify_dequeue_request_and_await(
+    pub async fn retrieve_from_queue_and_await(
         queue_name: String,
         uuid: Uuid,
         dequeue_sender: MpscSender<DequeueSyncInfo>,
@@ -241,7 +255,7 @@ impl SharedQueues {
 }
 
 impl Queue {
-    fn new(identifier: String, job: Option<web::Bytes>) -> Self {
+    fn new(identifier: String, job: Option<serde_json::Value>) -> Self {
         Self {
             uuid: uuid::Uuid::new_v4(),
             identifier,

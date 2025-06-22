@@ -1,7 +1,13 @@
+use std::str::FromStr;
+
 use actix_web::{HttpResponse, delete, get, post, put, web};
 use the_logger::{TheLogger, log_error, log_warning};
+use uuid::Uuid;
 
-use crate::modules::queuer::logic::{SharedQueues, SharedQueuesResult};
+use crate::modules::{
+    api::ApiData,
+    queuer::logic::{QueueExternal, QueueNameType, SharedQueues, SharedQueuesResult},
+};
 
 #[get("/status")]
 pub(super) async fn get_status_for_all() -> HttpResponse {
@@ -108,14 +114,49 @@ pub(super) async fn create_queue(path: web::Path<String>) -> HttpResponse {
     HttpResponse::Ok().body(format!("{} queue places remain available", available))
 }
 
-#[post("/queue_job")]
+#[post("/queue_job/{queue_name}")]
 pub(super) async fn add_to_queue() -> HttpResponse {
+    SharedQueues::add_to_queue().await;
     HttpResponse::Ok().finish()
 }
 
-#[post("/dequeue_job/{uuid}")]
-pub(super) async fn remove_from_queue() -> HttpResponse {
-    HttpResponse::Ok().finish()
+#[post("/dequeue_job/{queue_name}/{uuid}")]
+pub(super) async fn retrieve_from_queue(
+    app_data: web::Data<ApiData>,
+    path: web::Path<(QueueNameType, String)>,
+) -> HttpResponse {
+    let (queue_name, uuid_str) = path.into_inner();
+
+    let logger = TheLogger::instance();
+
+    let Ok(uuid) = Uuid::from_str(&uuid_str) else {
+        return HttpResponse::BadRequest().body("Invalid UUID received");
+    };
+    let queue_opt = match SharedQueues::retrieve_from_queue_and_await(
+        queue_name,
+        uuid,
+        app_data.dequeue_sender.clone(),
+    )
+    .await
+    {
+        Ok(queue) => queue,
+        Err(error) => {
+            log_error!(
+                logger,
+                "Error trying to retrieve job UUID: {} from queue. Cause: {}",
+                uuid_str,
+                error
+            );
+            return HttpResponse::InternalServerError().finish();
+        }
+    };
+
+    let Some(queue) = queue_opt else {
+        log_error!(logger, "Job retrieving timed out!");
+        return HttpResponse::InternalServerError().finish();
+    };
+
+    HttpResponse::Ok().json(QueueExternal::from(queue))
 }
 
 #[delete("/delete/{queue_name}")]

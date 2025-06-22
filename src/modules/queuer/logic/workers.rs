@@ -70,10 +70,6 @@ struct InternalConfirmSyncInfo {
     dequeue_sync_info_sender: OneShotSender<Queue>,
 }
 
-struct InternalQueueSyncInfo {
-    item: Queue,
-}
-
 /// Enum used to send different tasks to the workers. Each task will be sent by a channel
 enum TaskContent {
     NewJob(Queue),
@@ -173,7 +169,7 @@ pub async fn workers_manager_handler(
         //  Remain here while every message in the channel is routed to their corresponding worker
         while let Some(new_job) = new_jobs_receiver.recv().await {
             let uuid = new_job.job.uuid;
-            if let Err(error) = add_job_to_shared_queue(new_job).await {
+            if let Err(error) = add_job_to_shared_queue(&workers_map, new_job).await {
                 log_error!(
                     logger,
                     "Error trying to queue new job with UUID: {}. Cause: {}",
@@ -200,17 +196,21 @@ pub async fn workers_manager_handler(
     }
 }
 
-async fn add_job_to_shared_queue(new_job: NewJobInfo) -> TheResult<()> {
-    let shared = SharedQueues::get_shared()?;
-
-    let Some(main_queue) = shared.get(&new_job.queue_name) else {
+async fn add_job_to_shared_queue(
+    workers_map: &HashMap<QueueNameType, tokio::sync::mpsc::Sender<TaskContent>>,
+    new_job: NewJobInfo,
+) -> TheResult<()> {
+    let Some(worker_sender) = workers_map.get(&new_job.queue_name) else {
         return Err(create_new_error!(format!(
-            "Could not find queue named: {}",
+            "Could not find main queue named: {}",
             new_job.queue_name
         )));
     };
 
-    main_queue.write().await.push_back(new_job.job);
+    worker_sender
+        .send(TaskContent::NewJob(new_job.job))
+        .await
+        .map_err(|error| create_new_error!(error))?;
 
     Ok(())
 }
